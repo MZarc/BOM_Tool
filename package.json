@@ -1,6 +1,7 @@
 {
   "name": "bom-tool",
   "productName": "BOM Tool",
+  "description": "Production-Ready Hardware BOM & Pick-and-Place (PNP) Validation Engine",
   "private": true,
   "version": "1.2.5",
   "author": "Meet Mistry",
