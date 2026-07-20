@@ -101,8 +101,8 @@ BOM_Tool/
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/your-username/bom-tool.git
-cd bom-tool
+git clone https://github.com/MZarc/BOM_Tool.git
+cd BOM_Tool
 ```
 
 ### 2. Install Dependencies
