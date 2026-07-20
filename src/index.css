@@ -1,0 +1,155 @@
+@import "tailwindcss";
+
+@keyframes shimmer {
+  0% { transform: translateX(-150%) skewX(-25deg); }
+  100% { transform: translateX(300%) skewX(-25deg); }
+}
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 0.2; transform: scale(1.25); }
+  50% { opacity: 0.4; transform: scale(1.35); }
+}
+
+
+@font-face {
+  font-family: 'HandilPro';
+  src: url('./assets/fonts/HandilproMedium-w10l3.otf') format('opentype');
+  font-weight: 500;
+  font-style: normal;
+}
+
+@theme {
+  --font-sans: 'HandilPro', ui-sans-serif, system-ui;
+  --color-primary: #3b82f6;
+  --color-cta: #10b981; /* Emerald for a more vibrant look */
+}
+
+:root {
+  --background: 222 47% 11%;
+  --foreground: 213 31% 91%;
+  --primary: 221 83% 53%;
+  --accent: 142 70% 45%;
+  --radius: 1.5rem;
+}
+
+* {
+  font-family: 'HandilPro', sans-serif !important;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  /* Dark overlay gradient to ensure high readability with solid cards */
+  background: 
+    linear-gradient(rgba(8, 13, 26, 0.65), rgba(8, 13, 26, 0.7)),
+    url('./assets/bg.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  min-height: 100vh;
+  color-scheme: dark;
+}
+
+.glass-card {
+  @apply bg-[#151b2b]/95 border border-white/15 shadow-[0_12px_40px_rgba(0,0,0,0.5)] rounded-[2rem];
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.glass-card:hover {
+  @apply border-white/30 bg-[#1e273d];
+}
+
+.glass-button {
+  @apply relative overflow-hidden bg-primary/10 border border-primary/20 text-white font-medium py-3 px-8 rounded-xl transition-all duration-300;
+  box-shadow: 0 4px 16px 0 rgba(0,0,0,0.1);
+}
+
+.glass-button:hover {
+  @apply bg-primary/20 border-primary/50 text-white;
+}
+
+.glass-button:active {
+  @apply scale-95 opacity-80;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255,255,255,0.02);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.1);
+  border-radius: 10px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255,255,255,0.3);
+}
+
+/* Dark-themed select element — prevents OS white popup */
+.bom-select {
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: #fff;
+  color-scheme: dark;
+}
+
+.bom-select:focus {
+  border-color: rgba(255, 255, 255, 0.25);
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.bom-select option {
+  background-color: #0f1a2e;
+  color: #e2e8f0;
+}
+
+/* Sticky table header helper — Solid high contrast for speed */
+.bom-thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #080d19;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Stable scrollbar gutter — prevents layout shift */
+.bom-scroll-stable {
+  scrollbar-gutter: stable;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-delay: -1ms !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    background-attachment: initial !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0s !important;
+    will-change: auto !important;
+  }
+}
+
+.shadow-glow {
+  /* Simplified for performance: standard shadow, no filter blur */
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
+}
+
+.shadow-glow-cta {
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
+}
+
+.drag {
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
