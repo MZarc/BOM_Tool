@@ -1,17 +1,18 @@
-<p align="center">
+<div align="center">
+
   <img src="public/icon.png" alt="BOM Tool Icon" width="120" />
-  
-</p>
 
-# BOM Tool
+  # BOM Tool 💎
 
-> **Production-Ready Hardware BOM & Pick-and-Place (PNP) Validation Engine**
+  > **Production-Ready Hardware BOM & Pick-and-Place (PNP) Validation Engine**
 
-[![Electron](https://img.shields.io/badge/Electron-30.0.1-47A248?style=flat&logo=electron&logoColor=white)](https://www.electronjs.org/)
-[![React](https://img.shields.io/badge/React-18.2.0-61DAFB?style=flat&logo=react&logoColor=black)](https://react.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.2-3178C6?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Vite](https://img.shields.io/badge/Vite-5.1-646CFF?style=flat&logo=vite&logoColor=white)](https://vitejs.dev/)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+  [![Electron](https://img.shields.io/badge/Electron-30.0.1-47A248?style=flat&logo=electron&logoColor=white)](https://www.electronjs.org/)
+  [![React](https://img.shields.io/badge/React-18.2.0-61DAFB?style=flat&logo=react&logoColor=black)](https://react.dev/)
+  [![TypeScript](https://img.shields.io/badge/TypeScript-5.2-3178C6?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+  [![Vite](https://img.shields.io/badge/Vite-5.1-646CFF?style=flat&logo=vite&logoColor=white)](https://vitejs.dev/)
+  [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+</div>
 
 A high-performance desktop engineering utility engineered for hardware manufacturing, SMT assembly, and component procurement teams to manage, compare, validate, and export Bills of Materials (BOM) and Pick-and-Place (PNP) data with zero data loss.
 
