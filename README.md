@@ -3,9 +3,7 @@
   
 </p>
 
-<p align="center">
 # BOM Tool
-</p>
 
 > **Production-Ready Hardware BOM & Pick-and-Place (PNP) Validation Engine**
 
