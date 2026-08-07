@@ -1,8 +1,8 @@
 <p align="center">
   <img src="public/icon.png" alt="BOM Tool Icon" width="120" />
-</p>
 
-# BOM Tool 💎
+# BOM Tool
+</p>
 
 > **Production-Ready Hardware BOM & Pick-and-Place (PNP) Validation Engine**
 
@@ -36,7 +36,7 @@ In PCB manufacturing, component mismatches, designator oversights, or modified M
 
 ### 🎯 2. Pick & Place (PNP) File Validator
 - Validates SMT placement files against master BOM lists.
-- Checks designator counts (e.g., `C1, C2, C3`), rotation flags, component footprints, and placement completeness.
+- Checks designator counts (e.g., `C1, C2, C3`).
 - Highlights unplaced BOM parts and unlisted PNP designators.
 
 ### 📊 3. High-Fidelity Template-Preserving Excel Export (ExcelJS)
