@@ -39,16 +39,24 @@
 body {
   margin: 0;
   padding: 0;
-  /* Dark overlay gradient to ensure high readability with solid cards */
+  min-height: 100vh;
+  color-scheme: dark;
+  position: relative;
+  background-color: #080d1a;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
   background: 
     linear-gradient(rgba(8, 13, 26, 0.65), rgba(8, 13, 26, 0.7)),
     url('./assets/bg.jpg');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  background-attachment: fixed;
-  min-height: 100vh;
-  color-scheme: dark;
+  pointer-events: none;
 }
 
 .glass-card {
@@ -119,9 +127,10 @@ body {
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* Stable scrollbar gutter — prevents layout shift */
+/* Stable scrollbar gutter & no scroll anchoring rubber-banding */
 .bom-scroll-stable {
   scrollbar-gutter: stable;
+  overflow-anchor: none !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -53,3 +53,5 @@ lint_errors.txt
 .DS_Store
 Thumbs.db
 
+# Agent configurations
+.agent/

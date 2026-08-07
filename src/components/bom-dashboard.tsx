@@ -190,6 +190,77 @@ function ToolBar({
   );
 }
 
+// --- Double Click Input Component ---
+function DoubleClickInput({
+  value,
+  onUpdate,
+  ariaLabel,
+  title,
+  className,
+  type = 'text',
+  placeholder = '—',
+  isNumber = false
+}: {
+  value: string | number;
+  onUpdate: (val: string | number) => void;
+  ariaLabel?: string;
+  title?: string;
+  className?: string;
+  type?: string;
+  placeholder?: string;
+  isNumber?: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [localVal, setLocalVal] = useState(String(value ?? ''));
+
+  React.useEffect(() => {
+    if (!editing) setLocalVal(String(value ?? ''));
+  }, [value, editing]);
+
+  if (!editing) {
+    return (
+      <div
+        onDoubleClick={() => setEditing(true)}
+        title={title || String(value)}
+        className={`w-full px-2 py-4 select-none cursor-pointer truncate ${className}`}
+      >
+        {String(value) || placeholder}
+      </div>
+    );
+  }
+
+  return (
+    <input
+      type={type}
+      aria-label={ariaLabel}
+      autoFocus
+      title={title}
+      className={`w-full bg-white/10 px-2 py-4 text-center focus:outline-none transition-all ${className}`}
+      value={localVal}
+      onChange={e => setLocalVal(e.target.value)}
+      onBlur={() => {
+        setEditing(false);
+        if (isNumber) {
+          onUpdate(parseInt(localVal) || 0);
+        } else {
+          onUpdate(localVal);
+        }
+      }}
+      onKeyDown={e => {
+        if (e.key === 'Enter') {
+          setEditing(false);
+          if (isNumber) {
+            onUpdate(parseInt(localVal) || 0);
+          } else {
+            onUpdate(localVal);
+          }
+        }
+      }}
+      placeholder={placeholder}
+    />
+  );
+}
+
 // --- Designator Input Sub-component ---
 function DesignatorInput({ 
   value, 
@@ -214,7 +285,7 @@ function DesignatorInput({
   if (!isFocused) {
     return (
       <div 
-        onClick={() => setIsFocused(true)}
+        onDoubleClick={() => setIsFocused(true)}
         title={value.join(', ')}
         className={`w-full flex items-center justify-center flex-wrap gap-x-1.5 gap-y-1 px-3 py-2 text-xs font-semibold font-mono group-hover:text-white rounded-lg transition-all text-center [text-shadow:0_1px_2px_rgba(0,0,0,0.5)] cursor-text ${
           isModified ? 'bg-indigo-500/10 ring-1 ring-inset ring-indigo-500/40 shadow-[0_0_10px_rgba(129,140,248,0.2)]' : ''
@@ -395,29 +466,34 @@ function EditableBOMGrid({
   useEffect(() => {
     if (!jumpTarget || !tableRef.current) return;
 
-    // Use rAF to ensure DOM has settled after state update
+    const ROW_HEIGHT = 52;
+    const container = tableRef.current;
+    
+    const targetIdx = filteredData.findIndex(r => r.originalRowIdx === jumpTarget.rowIdx);
+    const idxToScroll = targetIdx !== -1 ? targetIdx : Math.max(0, jumpTarget.rowIdx - 1);
+    const targetScrollTop = Math.max(0, (idxToScroll * ROW_HEIGHT) - (container.clientHeight / 3));
+    
+    // Synchronously jump DOM container and React scrollTop state together
+    container.scrollTop = targetScrollTop;
+    setScrollTop(targetScrollTop);
+    setHighlightedRow(jumpTarget.rowIdx);
+
+    // Micro-align on next frame if row element is in DOM
     const raf = requestAnimationFrame(() => {
-      const container = tableRef.current!;
       const rowElem = container.querySelector<HTMLElement>(`#row-${jumpTarget.rowIdx}`);
-      if (!rowElem) return;
-
-      // Scroll the overflow container (not the window) so the row is centered
-      const containerRect = container.getBoundingClientRect();
-      const rowRect = rowElem.getBoundingClientRect();
-      const offset = rowRect.top - containerRect.top + container.scrollTop;
-      const center = offset - container.clientHeight / 2 + rowRect.height / 2;
-      container.scrollTo({ top: Math.max(0, center), behavior: 'smooth' });
-
-      setHighlightedRow(jumpTarget.rowIdx);
-      const timer = setTimeout(() => setHighlightedRow(null), 5000);
-      // Store timer ref for cleanup — captured in closure
-      (rowElem as HTMLElement & { _hlTimer?: ReturnType<typeof setTimeout> })._hlTimer = timer;
+      if (rowElem) {
+        rowElem.scrollIntoView({ block: 'nearest' });
+      }
     });
 
+    const timer = setTimeout(() => setHighlightedRow(null), 5000);
     return () => {
       cancelAnimationFrame(raf);
+      clearTimeout(timer);
     };
-  }, [jumpTarget]);
+  }, [jumpTarget, filteredData]);
+
+  const [scrollTop, setScrollTop] = useState(0);
 
   const hasRestored = useRef(false);
   const lastReportedScroll = useRef<number>(0);
@@ -427,15 +503,19 @@ function EditableBOMGrid({
   useEffect(() => {
     if (tableRef.current && initialScroll !== undefined && !hasRestored.current) {
       tableRef.current.scrollTop = initialScroll;
+      setScrollTop(initialScroll);
       lastReportedScroll.current = initialScroll;
       hasRestored.current = true;
     }
   }, [initialScroll]); // Dependency added for lint, Ref ensures 'once' logic
 
-  // Throttled scroll tracking to prevent render flooding
+  // Throttled scroll tracking & stepped windowing to prevent scroll recoil
   const handleScroll = useCallback(() => {
     if (tableRef.current) {
       const top = tableRef.current.scrollTop;
+      // Only update state when scroll shifts by > 150px to eliminate per-pixel DOM shifts & bounce-back
+      setScrollTop(prev => Math.abs(top - prev) > 150 ? top : prev);
+      
       // If the change is significant or it's the end of a scroll, report it
       if (Math.abs(top - lastReportedScroll.current) > 50) {
         lastReportedScroll.current = top;
@@ -449,6 +529,19 @@ function EditableBOMGrid({
       }
     }
   }, [onScrollChange]);
+
+  const visibleWindow = useMemo(() => {
+    if (filteredData.length <= 50) {
+      return { startIndex: 0, endIndex: filteredData.length, topPadding: 0, bottomPadding: 0 };
+    }
+    const ROW_HEIGHT = 52;
+    const OVERSCAN = 25; // Generous 1250px buffer prevents scroll edge clipping
+    const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
+    const endIndex = Math.min(filteredData.length, Math.ceil((scrollTop + 750) / ROW_HEIGHT) + OVERSCAN);
+    const topPadding = startIndex * ROW_HEIGHT;
+    const bottomPadding = (filteredData.length - endIndex) * ROW_HEIGHT;
+    return { startIndex, endIndex, topPadding, bottomPadding };
+  }, [filteredData.length, scrollTop]);
 
   return (
     <div className="glass-card overflow-hidden border-white/5 h-full flex flex-col shadow-2xl">
@@ -585,7 +678,10 @@ function EditableBOMGrid({
             </tr>
           </thead>
           <tbody>
-            {filteredData.map((row, i) => {
+            {visibleWindow.topPadding > 0 && (
+              <tr style={{ height: `${visibleWindow.topPadding}px` }} aria-hidden="true" />
+            )}
+            {filteredData.slice(visibleWindow.startIndex, visibleWindow.endIndex).map((row, i) => {
               const badge = statusBadge(row);
               const highlight = highlightLogic?.(row) || '';
               
@@ -593,7 +689,7 @@ function EditableBOMGrid({
                 <tr
                   key={row.originalRowIdx}
                   id={`row-${row.originalRowIdx}`}
-                  className={`border-b border-white/20 hover:bg-white/[0.06] transition-colors group bg-black/15 ${highlight} align-middle relative hover:z-[70] [will-change:background-color] [backface-visibility:hidden] [transform:translateZ(0)] ${
+                  className={`border-b border-white/20 hover:bg-white/[0.06] transition-colors group bg-black/15 ${highlight} align-middle relative hover:z-[70] ${
                     highlightedRow === row.originalRowIdx ? 'bg-primary/20 ring-2 ring-primary/50 relative z-[75]' : ''
                   }`}
                 >
@@ -601,39 +697,39 @@ function EditableBOMGrid({
                     <div className="flex items-center justify-center h-full w-full">{row.originalRowIdx}</div>
                   </td>
                   <td className="p-0 border-r border-white/20 w-[19%] align-middle overflow-hidden text-center">
-                    <input
-                      aria-label={`Row ${i + 1} MPN`}
+                    <DoubleClickInput
+                      ariaLabel={`Row ${i + 1} MPN`}
                       title={row.mpn}
-                      className={`w-full bg-transparent px-2 py-4 text-xs font-semibold font-mono text-center focus:outline-none focus:bg-white/10 transition-all placeholder-white/5 truncate ${
+                      className={`text-xs font-semibold font-mono ${
                         row.swappedResult ? 'text-indigo-400' : 'text-white/90'
                       }`}
                       value={row.mpn}
-                      onChange={e => onUpdate(row.originalRowIdx, 'mpn', e.target.value)}
+                      onUpdate={val => onUpdate(row.originalRowIdx, 'mpn', val)}
                       placeholder="—"
                     />
                   </td>
                   <td className="p-0 border-r border-white/20 w-[19%] align-middle text-center overflow-hidden">
-                    <input
+                    <DoubleClickInput
                       type="number"
-                      aria-label={`Row ${i + 1} Quantity`}
+                      isNumber
+                      ariaLabel={`Row ${i + 1} Quantity`}
                       title={String(row.qty)}
-                      className={`w-full bg-transparent px-2 py-4 text-xs font-semibold font-mono text-center focus:outline-none focus:bg-white/10 transition-all ${
+                      className={`text-xs font-semibold font-mono ${
                         highlight.includes('color-sky') || row.qtyMismatchResult ? 'text-sky-400' : 
                         row.qtyMismatch ? 'text-amber-400' : 'text-white/90'
                       }`}
                       value={row.qty}
-                      min={0}
-                      onChange={e => onUpdate(row.originalRowIdx, 'qty', parseInt(e.target.value) || 0)}
+                      onUpdate={val => onUpdate(row.originalRowIdx, 'qty', val)}
                       placeholder="0"
                     />
                   </td>
                   <td className="p-0 border-r border-white/20 w-[19%] align-middle overflow-hidden text-center">
-                    <input
-                      aria-label={`Row ${i + 1} Description`}
+                    <DoubleClickInput
+                      ariaLabel={`Row ${i + 1} Description`}
                       title={row.description || ''}
-                      className="w-full bg-transparent px-2 py-4 text-[11px] font-semibold font-mono text-white/40 group-hover:text-white/70 text-center focus:outline-none focus:bg-white/10 transition-all truncate"
+                      className="text-[11px] font-semibold font-mono text-white/40 group-hover:text-white/70"
                       value={row.description || ''}
-                      onChange={e => onUpdate(row.originalRowIdx, 'description', e.target.value)}
+                      onUpdate={val => onUpdate(row.originalRowIdx, 'description', val)}
                       placeholder="—"
                     />
                   </td>
@@ -676,6 +772,9 @@ function EditableBOMGrid({
                 </tr>
               );
             })}
+            {visibleWindow.bottomPadding > 0 && (
+              <tr style={{ height: `${visibleWindow.bottomPadding}px` }} aria-hidden="true" />
+            )}
           </tbody>
         </table>
         {filteredData.length === 0 && (
@@ -1091,12 +1190,14 @@ export function AboutDialog({ onClose }: { onClose: () => void }) {
           </div>
 
           <div className="space-y-6 max-w-sm mx-auto">
-            <div className="p-6 rounded-[2rem] bg-white/5 border border-white/5 space-y-4">
-              <p className="text-sm font-bold text-white/60 uppercase tracking-widest">Developed by</p>
-              <h3 className="text-3xl font-black bg-gradient-to-r from-blue-400 via-indigo-300 to-emerald-400 bg-clip-text text-transparent italic">
-                Meet Mistry
+            <div className="relative p-6 rounded-[2rem] bg-[#080d1a]/80 border border-white/15 shadow-[0_8px_32px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.15)] flex flex-col items-center justify-center space-y-3">
+              <span className="text-[9px] font-black uppercase tracking-[0.3em] text-amber-200/60 leading-none">
+                DEVELOPED BY
+              </span>
+              <h3 className="text-3xl font-black uppercase tracking-[0.18em] bg-gradient-to-r from-amber-100 via-white to-amber-300 bg-clip-text text-transparent [text-shadow:0_0_20px_rgba(251,191,36,0.3)]">
+                MEET MISTRY
               </h3>
-              <div className="flex items-center justify-center gap-4 pt-2">
+              <div className="flex items-center justify-center gap-4 pt-1">
                 <button 
                   onClick={() => openExternal('https://meetmistry.vercel.app')}
                   title="Visit Developer Portfolio"
@@ -1630,7 +1731,8 @@ export function BOMDashboard() {
     nextRow.modifiedFields = modifiedFields;
     
     nextRows[realIdx] = nextRow;
-    commit(type, { ...file, rows: nextRows, merges: file.merges });
+    const recalculatedRows = BOMProcessor.recalculateDuplicates(nextRows);
+    commit(type, { ...file, rows: recalculatedRows, merges: file.merges });
   };
 
   const handleSyncFromMaster = (row: BOMRow, targetIdx: number) => {
@@ -2214,10 +2316,6 @@ export function BOMDashboard() {
           />
         )}
 
-        {/* Ambient blobs */}
-        <div className="fixed top-[10%] right-[10%] w-80 h-80 bg-primary/5 rounded-full blur-[120px] -z-10 pointer-events-none" />
-        <div className="fixed bottom-[10%] left-[10%] w-80 h-80 bg-cta/5 rounded-full blur-[120px] -z-10 pointer-events-none" />
-
         {/* Header - Integrated Drag Region (Full Width) */}
         <header 
           className="w-full flex items-center justify-between gap-4 mb-4 shrink-0 transition-all duration-500 pl-1 drag"
@@ -2234,7 +2332,6 @@ export function BOMDashboard() {
                 onClick={() => setShowAbout(true)}
                 title="About BOM Tool"
               >
-                <div className="absolute -inset-2 bg-gradient-to-tr from-primary/30 via-blue-400/10 to-transparent rounded-2xl blur-md opacity-0 group-hover:opacity-100 transition-all duration-700" />
                 <div className="relative glass-card p-2 bg-white/5 border-white/10 rounded-2xl shadow-2xl group-hover:bg-white/10 group-hover:border-white/20 transition-all duration-300">
                   <img 
                     src="./icon.png" 
@@ -2251,22 +2348,20 @@ export function BOMDashboard() {
                     BOM Tool
                   </h1>
                   
-                  {/* High-Fidelity Developer Pill */}
-                  <div className="relative group/pill cursor-default select-none group shrink-0">
-                    <div className="absolute -inset-1 bg-gradient-to-r from-primary/40 to-blue-600/30 rounded-full blur-md opacity-0 group-hover/pill:opacity-100 transition-all duration-700" />
-                    <div className="relative flex whitespace-nowrap shrink-0 items-center gap-2.5 px-3 py-1.5 bg-slate-950/40 backdrop-blur-2xl border border-white/10 rounded-full shadow-lg transition-all duration-500 hover:border-primary/40 group-hover/pill:translate-y-[-0.5px]">
-                      <div className="relative flex h-1.5 w-1.5 shrink-0">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/40 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-gradient-to-tr from-primary to-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.6)]"></span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[9px] font-black uppercase tracking-[0.2em] text-white/40 group-hover/pill:text-white/60 transition-colors whitespace-nowrap">Developed by</span>
-                        <span className="text-[10px] font-black uppercase tracking-[0.1em] text-white/90 group-hover/pill:text-white group-hover/pill:[text-shadow:0_0_12px_rgba(59,130,246,0.5)] transition-all">Meet Mistry</span>
-                      </div>
+                  {/* High-Fidelity Luxury Developer Badge */}
+                  <div className="relative group/pill cursor-default select-none shrink-0">
+                    <div className="absolute -inset-0.5 bg-gradient-to-r from-amber-500/20 via-blue-500/20 to-emerald-500/20 rounded-xl blur-sm opacity-40 group-hover/pill:opacity-100 transition-opacity duration-500" />
+                    <div className="relative flex flex-col items-center justify-center px-3.5 py-1.5 bg-[#090f1d]/90 backdrop-blur-md border border-white/15 rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.15)] group-hover/pill:border-amber-400/40 transition-all duration-300">
+                      <span className="text-[7.5px] font-black uppercase tracking-[0.25em] text-amber-200/60 group-hover/pill:text-amber-200/90 transition-colors leading-none mb-0.5 whitespace-nowrap">
+                        DEVELOPED BY
+                      </span>
+                      <span className="text-[10.5px] font-black uppercase tracking-[0.16em] bg-gradient-to-r from-amber-100 via-white to-amber-300 bg-clip-text text-transparent group-hover/pill:[text-shadow:0_0_12px_rgba(251,191,36,0.6)] transition-all leading-none whitespace-nowrap">
+                        MEET MISTRY
+                      </span>
                     </div>
                   </div>
                 </div>
-                <p className="text-blue-100/70 font-black text-[10px] tracking-[0.2em] uppercase flex items-center whitespace-nowrap">Production-Ready BOM Accuracy</p>
+                <p className="text-blue-100/70 font-black text-[10px] tracking-[0.2em] uppercase flex items-center whitespace-nowrap">ULTRA-FAST HARMONIZED BOM INTELLIGENCE</p>
               </div>
             </div>
           </motion.div>
@@ -2284,7 +2379,7 @@ export function BOMDashboard() {
                   initial={{ opacity: 0, scale: 0.85 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.85 }}
-                  className="flex items-center gap-1.5 bg-white/5 backdrop-blur-2xl p-1.5 rounded-2xl border border-white/10 shadow-2xl"
+                  className="flex items-center gap-1.5 bg-[#0a101d] p-1.5 rounded-2xl border border-white/10 shadow-2xl"
                 >
                   <button
                     onClick={() => {
@@ -2314,7 +2409,7 @@ export function BOMDashboard() {
             </AnimatePresence>
 
             {/* Tab Nav */}
-            <nav className="bg-white/5 backdrop-blur-2xl p-1.5 rounded-2xl border border-white/10 shadow-2xl pointer-events-auto flex gap-3 items-center">
+            <nav className="bg-[#0a101d] p-1.5 rounded-2xl border border-white/10 shadow-2xl pointer-events-auto flex gap-3 items-center">
               <div className="flex gap-1">
                 <TabButton active={activeTab === 'analyzer'} onClick={() => setActiveTab('analyzer')} icon={<Database className="h-4 w-4" />} label="BOM Analyzer" />
                 <TabButton active={activeTab === 'pnp'} onClick={() => setActiveTab('pnp')} icon={<MapPin className="h-4 w-4" />} label="PnP Validator" />
@@ -2361,7 +2456,7 @@ export function BOMDashboard() {
                   <div className="flex-1 flex gap-4 min-h-0">
                     <div className="flex-1 flex flex-col gap-3 min-w-0">
                       {/* Toolbar within data state */}
-                      <div className="flex items-center justify-between gap-4 shrink-0 bg-slate-900/60 backdrop-blur-3xl p-3 px-4 rounded-2xl border border-white/10 shadow-2xl">
+                      <div className="flex items-center justify-between gap-4 shrink-0 bg-[#0d1527] p-3 px-4 rounded-2xl border border-white/10 shadow-2xl">
                         <ToolBar 
                           filename={analyzerFile.filename}
                           onRunTool={runAnalyzerTool}

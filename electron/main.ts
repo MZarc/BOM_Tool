@@ -3,44 +3,40 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import fs from 'node:fs/promises'
 import { existsSync } from 'node:fs'
-import { execSync } from 'node:child_process'
+import { exec, execSync } from 'node:child_process'
 
-// ─── Trust Injection Bootstrapper ─────────────────────────────────────────────
-// Checks for Meet Mistry cert and elevates ONLY if missing to establish trust.
-if (process.platform === 'win32') {
-  try {
-    const certName = 'Meet Mistry';
-    const checkCmd = `powershell -Command "if(Get-ChildItem -Path Cert:\\LocalMachine\\Root | Where-Object { $_.Subject -like '*CN=${certName}*' }) { exit 0 } else { exit 1 }"`;
-    
-    try {
-      execSync(checkCmd, { stdio: 'ignore' });
-    } catch {
-      // Cert is missing, trigger elevated installation
-      const devPath = path.join(process.cwd(), 'Meet_Mistry_cert.pfx');
-      const prodPath = path.join(process.resourcesPath, 'Meet_Mistry_cert.pfx');
-      const certPath = existsSync(prodPath) ? prodPath : devPath;
+// ─── Trust Injection Bootstrapper (Non-Blocking) ─────────────────────────────
+// Checks for Meet Mistry cert asynchronously so app window launches instantly.
+function checkTrustCertificateAsync() {
+  if (process.platform !== 'win32') return;
+  const certName = 'Meet Mistry';
+  const checkCmd = `powershell -Command "if(Get-ChildItem -Path Cert:\\LocalMachine\\Root | Where-Object { $_.Subject -like '*CN=${certName}*' }) { exit 0 } else { exit 1 }"`;
+  
+  exec(checkCmd, (error) => {
+    if (error) {
+      try {
+        const devPath = path.join(process.cwd(), 'Meet_Mistry_cert.pfx');
+        const prodPath = path.join(process.resourcesPath, 'Meet_Mistry_cert.pfx');
+        const certPath = existsSync(prodPath) ? prodPath : devPath;
 
-      if (!existsSync(certPath)) {
-        throw new Error(`Certificate not found at: ${certPath}`);
+        if (existsSync(certPath)) {
+          const elevateCmd = `powershell -Command "Start-Process powershell -ArgumentList '-ExecutionPolicy Bypass -Command \\"certutil -addstore -f Root ''${certPath}''; certutil -addstore -f TrustedPublisher ''${certPath}''\\"' -Verb RunAs -Wait"`;
+          console.log('Cert missing. Requesting elevation for trust injection...');
+          execSync(elevateCmd, { stdio: 'inherit' });
+        }
+      } catch (err) {
+        console.error('Trust injection failed:', err);
       }
-
-      const elevateCmd = `powershell -Command "Start-Process powershell -ArgumentList '-ExecutionPolicy Bypass -Command \\"certutil -addstore -f Root ''${certPath}''; certutil -addstore -f TrustedPublisher ''${certPath}''\\"' -Verb RunAs -Wait"`;
-      
-      console.log('Cert missing. Requesting elevation for trust injection...');
-      execSync(elevateCmd, { stdio: 'inherit' });
     }
-  } catch (err) {
-    console.error('Trust injection failed:', err);
-  }
+  });
 }
 // ──────────────────────────────────────────────────────────────────────────────
 
-// ─── GPU Optimization for Budget Laptops ──────────────────────────────────────
-// This stabilizes rendering on integrated Intel GPUs and reduces flickering
-// with heavy blur/transparency effects.
+// ─── GPU & Low Memory Optimization ───────────────────────────────────────────
+// Optimizes memory footprint and GPU rendering for budget/integrated GPU laptops.
 app.commandLine.appendSwitch('enable-gpu-rasterization');
 app.commandLine.appendSwitch('enable-zero-copy');
-app.commandLine.appendSwitch('ignore-gpu-blocklist');
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512');
 // ──────────────────────────────────────────────────────────────────────────────
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -71,20 +67,19 @@ function createWindow() {
     icon: path.join(process.env.VITE_PUBLIC, 'icon.png'),
     frame: false,
     show: false,
-    backgroundColor: '#060d1f', // matches splash background
+    center: true,
+    backgroundColor: '#080e1a', // Exact match for splash screen background
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },
   })
 
   win?.removeMenu()
+  win?.maximize() // Maximize native HWND state before first paint to eliminate top-left flash
 
-  // THE ULTIMATE ABSOLUTE SOLUTION for Windows Gaps:
-  // 1. Frame: false removes ALL native OS gaps/borders.
-  // 2. Maximize natively (fills screen 100%).
   win.once('ready-to-show', () => {
-    win?.maximize()
     win?.show()
+    win?.focus()
   })
 
   // Block resize events via logic to keep it "locked"
@@ -127,7 +122,10 @@ app.on('activate', () => {
   }
 })
 
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+  createWindow()
+  checkTrustCertificateAsync()
+})
 
 // ─── IPC Handlers ─────────────────────────────────────────────────────────────
 ipcMain.handle('save-excel', async (_event, { buffer, filename }) => {

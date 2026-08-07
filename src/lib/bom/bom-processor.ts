@@ -463,4 +463,30 @@ export class BOMProcessor {
     }
     return dups;
   }
+
+  /** Recalculate duplicate designators across all rows after an edit */
+  static recalculateDuplicates(rows: BOMRow[]): BOMRow[] {
+    const globalCounts = new Map<string, number>();
+    rows.forEach(r => {
+      r.designators.forEach(d => {
+        const k = d.trim().toUpperCase();
+        if (k) globalCounts.set(k, (globalCounts.get(k) || 0) + 1);
+      });
+    });
+
+    return rows.map(r => {
+      const rowDups = new Set<string>();
+      r.designators.forEach(d => {
+        const k = d.trim().toUpperCase();
+        if (k && (globalCounts.get(k) || 0) > 1) {
+          rowDups.add(k);
+        }
+      });
+      return {
+        ...r,
+        duplicate: rowDups.size > 0,
+        duplicateDesignators: rowDups
+      };
+    });
+  }
 }

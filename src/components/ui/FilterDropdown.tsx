@@ -117,7 +117,7 @@ export function FilterDropdown({
               initial={{ opacity: 0, y: dropUp ? -10 : 10, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: dropUp ? -10 : 10, scale: 0.95 }}
-              className="fixed z-[110] w-[260px] bg-[#0a0f1d]/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col"
+              className="fixed z-[110] w-[260px] bg-[#0c1424] border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col"
               style={{
                 top: coords.top,
                 left: coords.left,

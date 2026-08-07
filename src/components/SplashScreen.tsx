@@ -78,14 +78,10 @@ export function SplashScreen({ onComplete }: Props) {
         <motion.div
           key="splash"
           initial={{ opacity: 1 }}
-          exit={{ opacity: 0, scale: 1.03, filter: 'blur(12px)' }}
-          transition={{ duration: 0.85, ease: [0.4, 0, 0.2, 1] }}
+          exit={{ opacity: 0, scale: 1.02 }}
+          transition={{ duration: 0.4, ease: 'easeOut' }}
           className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#080e1a] overflow-hidden"
         >
-          {/* Background ambient blobs */}
-          <div className="absolute top-1/4 left-1/4 w-[480px] h-[480px] rounded-full bg-primary/8 blur-[140px] pointer-events-none" />
-          <div className="absolute bottom-1/4 right-1/4 w-[360px] h-[360px] rounded-full bg-blue-600/6 blur-[120px] pointer-events-none" />
-
           {/* Circuit line decorators */}
           <svg className="absolute inset-0 w-full h-full opacity-[0.04] pointer-events-none" xmlns="http://www.w3.org/2000/svg">
             <defs>
@@ -101,14 +97,11 @@ export function SplashScreen({ onComplete }: Props) {
 
             {/* Logo Container */}
             <motion.div
-              initial={{ opacity: 0, scale: 0.7, y: 20 }}
+              initial={{ opacity: 0, scale: 0.8, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              transition={{ duration: 0.7, delay: 0.1, ease: [0.34, 1.56, 0.64, 1] }}
+              transition={{ duration: 0.4, delay: 0.1 }}
               className="relative"
             >
-              {/* Multi-layer glow rings */}
-              <div className="absolute inset-0 rounded-3xl bg-primary/20 blur-xl scale-125" style={{ animation: 'pulse-slow 3s ease-in-out infinite' }} />
-              <div className="absolute inset-0 rounded-3xl bg-blue-500/10 blur-2xl scale-150" />
 
               <div className="relative w-28 h-28 rounded-3xl bg-slate-900 border border-white/10 shadow-[0_24px_80px_rgba(0,0,0,0.7),inset_0_1px_0_rgba(255,255,255,0.08)] flex items-center justify-center">
                 <img
@@ -181,18 +174,22 @@ export function SplashScreen({ onComplete }: Props) {
               </div>
             </motion.div>
 
-            {/* Developer Credit */}
+            {/* Premium Luxury Developer Badge */}
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.9 }}
-              className="flex items-center gap-2.5"
+              className="relative group cursor-default select-none mt-2"
             >
-              <div className="h-px w-10 bg-white/10" />
-              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/15">
-                Developed by <span className="text-white/30">Meet Mistry</span>
-              </span>
-              <div className="h-px w-10 bg-white/10" />
+              <div className="absolute -inset-0.5 bg-gradient-to-r from-amber-500/20 via-blue-500/20 to-emerald-500/20 rounded-2xl blur-md opacity-40 group-hover:opacity-100 transition-opacity duration-500" />
+              <div className="relative flex flex-col items-center justify-center px-5 py-2.5 bg-[#090f1d]/90 backdrop-blur-xl border border-white/15 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.6),inset_0_1px_1px_rgba(255,255,255,0.2)] group-hover:border-amber-400/40 transition-all duration-300">
+                <span className="text-[8px] font-black uppercase tracking-[0.3em] text-amber-200/60 group-hover:text-amber-200/90 transition-colors leading-none mb-1">
+                  DEVELOPED BY
+                </span>
+                <span className="text-[12px] font-black uppercase tracking-[0.2em] bg-gradient-to-r from-amber-100 via-white to-amber-300 bg-clip-text text-transparent group-hover:[text-shadow:0_0_16px_rgba(251,191,36,0.6)] transition-all leading-none">
+                  MEET MISTRY
+                </span>
+              </div>
             </motion.div>
 
           </div>

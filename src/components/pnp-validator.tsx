@@ -285,61 +285,6 @@ export function PnPValidator({
     return Array.from(statsMap.values()).sort((a,b) => a.designator.localeCompare(b.designator, undefined, { numeric: true }));
   }, [pnpFile, bomFile, hasValidated]);
 
-  // Handle Jumping and Highlighting in results
-  const [highlightedRow, setHighlightedRow] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (!jumpTarget || !hasValidated || !tableRef.current) return;
-
-    const raf = requestAnimationFrame(() => {
-      const container = tableRef.current!;
-      const rowElem = container.querySelector<HTMLElement>(`#row-${jumpTarget.rowIdx}`);
-      if (!rowElem) return;
-
-      // Scroll the overflow container so the row is centered in the visible area
-      const containerRect = container.getBoundingClientRect();
-      const rowRect = rowElem.getBoundingClientRect();
-      const offset = rowRect.top - containerRect.top + container.scrollTop;
-      const center = offset - container.clientHeight / 2 + rowRect.height / 2;
-      container.scrollTo({ top: Math.max(0, center), behavior: 'smooth' });
-
-      setHighlightedRow(jumpTarget.rowIdx);
-      const timer = setTimeout(() => setHighlightedRow(null), 5000);
-      (rowElem as HTMLElement & { _hlTimer?: ReturnType<typeof setTimeout> })._hlTimer = timer;
-    });
-
-    return () => cancelAnimationFrame(raf);
-  }, [jumpTarget, hasValidated]);
-
-  const hasRestored = useRef(false);
-  const lastReportedScroll = useRef<number>(0);
-  const scrollTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Restore scroll on mount
-  useEffect(() => {
-    if (tableRef.current && initialScroll !== undefined && !hasRestored.current) {
-      tableRef.current.scrollTop = initialScroll;
-      lastReportedScroll.current = initialScroll;
-      hasRestored.current = true;
-    }
-  }, [initialScroll]); // Dependency added for lint, Ref ensures 'once' logic
-
-  // Throttled scroll tracking
-  const handleScroll = useCallback(() => {
-    if (tableRef.current) {
-      const top = tableRef.current.scrollTop;
-      if (Math.abs(top - lastReportedScroll.current) > 50) {
-        lastReportedScroll.current = top;
-        onScrollChange?.(top);
-      } else {
-        if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
-        scrollTimeout.current = setTimeout(() => {
-          if (tableRef.current) onScrollChange?.(tableRef.current.scrollTop);
-        }, 150);
-      }
-    }
-  }, [onScrollChange]);
-
   const filteredResults = useMemo(() => {
     return results.filter(r => {
       // 1. Keyword search
@@ -359,6 +304,64 @@ export function PnPValidator({
       return matchesSearch && matchesFilter && matchesStatusHeader;
     });
   }, [results, searchQuery, filter, statusFilters]);
+
+  const hasRestored = useRef(false);
+  const lastReportedScroll = useRef<number>(0);
+  const scrollTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Restore scroll on mount
+  useEffect(() => {
+    if (tableRef.current && initialScroll !== undefined && !hasRestored.current) {
+      tableRef.current.scrollTop = initialScroll;
+      lastReportedScroll.current = initialScroll;
+      hasRestored.current = true;
+    }
+  }, [initialScroll]);
+
+  // Throttled scroll tracking
+  const handleScroll = useCallback(() => {
+    if (tableRef.current) {
+      const top = tableRef.current.scrollTop;
+      if (Math.abs(top - lastReportedScroll.current) > 50) {
+        lastReportedScroll.current = top;
+        onScrollChange?.(top);
+      } else {
+        if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
+        scrollTimeout.current = setTimeout(() => {
+          if (tableRef.current) onScrollChange?.(tableRef.current.scrollTop);
+        }, 150);
+      }
+    }
+  }, [onScrollChange]);
+
+  // Handle Jumping and Highlighting in results
+  const [highlightedRow, setHighlightedRow] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!jumpTarget || !hasValidated || !tableRef.current) return;
+
+    const ROW_HEIGHT = 48;
+    const container = tableRef.current;
+    const targetIdx = filteredResults.findIndex(r => r.rowIdx === jumpTarget.rowIdx);
+    const idxToScroll = targetIdx !== -1 ? targetIdx : Math.max(0, jumpTarget.rowIdx);
+    const targetScrollTop = Math.max(0, (idxToScroll * ROW_HEIGHT) - (container.clientHeight / 3));
+
+    container.scrollTop = targetScrollTop;
+    setHighlightedRow(jumpTarget.rowIdx);
+
+    const raf = requestAnimationFrame(() => {
+      const rowElem = container.querySelector<HTMLElement>(`#row-${jumpTarget.rowIdx}`);
+      if (rowElem) {
+        rowElem.scrollIntoView({ block: 'nearest' });
+      }
+    });
+
+    const timer = setTimeout(() => setHighlightedRow(null), 5000);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(timer);
+    };
+  }, [jumpTarget, hasValidated, filteredResults]);
 
   // Unique status values for filter dropdown
   const uniqueStatuses = useMemo(() => {
@@ -649,7 +652,7 @@ export function PnPValidator({
                   <div 
                     key={r.designator} 
                     id={`row-${r.rowIdx}`}
-                    className={`grid grid-cols-[100px_1fr_1fr_150px] border-b border-white/20 items-center transition-colors hover:bg-white/5 group [will-change:background-color] [backface-visibility:hidden] [transform:translateZ(0)] ${
+                    className={`grid grid-cols-[100px_1fr_1fr_150px] border-b border-white/20 items-center transition-colors hover:bg-white/5 group ${
                       highlightedRow === r.rowIdx ? 'bg-primary/20 ring-2 ring-primary/50 relative z-10' : ''
                     }`}
                   >
