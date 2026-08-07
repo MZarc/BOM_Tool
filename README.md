@@ -1,7 +1,10 @@
-<p align="center"
+<p align="center">
   <img src="public/icon.png" alt="BOM Tool Icon" width="120" />
+  
+</p>
 
-# BOM Tool>
+<p align="center"
+# BOM Tool
 </p>
 
 > **Production-Ready Hardware BOM & Pick-and-Place (PNP) Validation Engine**
