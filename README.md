@@ -2,7 +2,7 @@
 
   <img src="public/icon.png" alt="BOM Tool Icon" width="120" />
 
-  # BOM Tool 💎
+  # BOM Tool
 
   > **Production-Ready Hardware BOM & Pick-and-Place (PNP) Validation Engine**
 
