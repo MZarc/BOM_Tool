@@ -51,9 +51,18 @@ export class BOMCompare {
    * Uses Map and Set for O(n) performance — no nested loops.
    */
   static compare(sourceBOM: BOMRow[], targetBOM: BOMRow[]): ComparisonResults {
-    // Clone rows to avoid in-place mutation of the original state objects
-    const sourceCopy = sourceBOM.map(r => ({ ...r }));
-    const targetCopy = targetBOM.map(r => ({ ...r }));
+    // Clone rows to avoid in-place mutation of the original state objects.
+    // Sets are cloned too — otherwise `swappedDesignators` would accumulate
+    // stale entries on the original rows across repeated comparisons.
+    const cloneRow = (r: BOMRow): BOMRow => ({
+      ...r,
+      designators: [...r.designators],
+      duplicateDesignators: new Set(r.duplicateDesignators ?? []),
+      swappedDesignators: new Set(r.swappedDesignators ?? []),
+      modifiedFields: new Set(r.modifiedFields ?? []),
+    });
+    const sourceCopy = sourceBOM.map(cloneRow);
+    const targetCopy = targetBOM.map(cloneRow);
 
     const diff: BOMDiff = {
       missing: [],
@@ -80,6 +89,7 @@ export class BOMCompare {
       r.qtyMismatchResult = false; 
       r.comparisonQtyInfo = undefined;
       r.comparisonMPNInfo = undefined;
+      r.swappedDesignators = new Set();
     });
     targetCopy.forEach(r => { 
       r.extra = false; 
@@ -87,6 +97,7 @@ export class BOMCompare {
       r.qtyMismatchResult = false; 
       r.comparisonQtyInfo = undefined;
       r.comparisonMPNInfo = undefined;
+      r.swappedDesignators = new Set();
     });
 
     // 1. Build lookup maps for fast O(n) access
@@ -130,7 +141,7 @@ export class BOMCompare {
       const s = sourceByDes.get(des);
       const t = targetByDes.get(des);
 
-      if (s && t && normalize(s.mpn) !== normalize(t.mpn)) {
+      if (s && t && normalize(s.mpn) && normalize(t.mpn) && normalize(s.mpn) !== normalize(t.mpn)) {
         // Find the specific rows containing this designator
         const sourceRow = s.rows.find(r => r.designators.some(d => normalize(d) === des))!;
         const targetRow = t.rows.find(r => r.designators.some(d => normalize(d) === des))!;
@@ -192,6 +203,21 @@ export class BOMCompare {
             targetRowIndices: tRows.map(r => r.originalRowIdx)
           });
         }
+
+        // Designator overlap for parts that exist on both sides
+        const sDes = new Set(sRows.flatMap(r => r.designators.map(normalize)));
+        const tDes = new Set(tRows.flatMap(r => r.designators.map(normalize)));
+        const intersection = [...sDes].filter(d => tDes.has(d));
+        const missingInTarget = [...sDes].filter(d => !tDes.has(d));
+        const extraInTarget = [...tDes].filter(d => !sDes.has(d));
+        if (missingInTarget.length || extraInTarget.length) {
+          diff.designatorOverlap.push({
+            mpn,
+            intersection,
+            missingInTarget,
+            extraInTarget,
+          });
+        }
       }
     });
 
@@ -202,6 +228,21 @@ export class BOMCompare {
           r.extra = true;
           diff.extra.push(r);
         });
+      }
+    });
+
+    // Rows without an MPN cannot be matched by part number. Surface them as
+    // missing/extra instead of silently dropping them from the comparison.
+    sourceCopy.forEach(r => {
+      if (!normalize(r.mpn) && !r.missing) {
+        r.missing = true;
+        diff.missing.push(r);
+      }
+    });
+    targetCopy.forEach(r => {
+      if (!normalize(r.mpn) && !r.extra) {
+        r.extra = true;
+        diff.extra.push(r);
       }
     });
 

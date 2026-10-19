@@ -24,6 +24,10 @@ export interface SheetPickerState {
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+/** Fixed row height (px). Must stay in sync with the row markup so the
+ *  virtualized window math and the spacer rows line up exactly. */
+const ROW_HEIGHT = 64;
+
 type Tab = 'analyzer' | 'comparator' | 'pnp';
 type ToolId = 'normalize' | 'expand' | 'validate' | 'duplicates' | 'fix_mismatch' | 'fix_duplicate';
 
@@ -222,9 +226,9 @@ function DoubleClickInput({
       <div
         onDoubleClick={() => setEditing(true)}
         title={title || String(value)}
-        className={`w-full px-2 py-4 select-none cursor-pointer truncate ${className}`}
+        className={`w-full h-full px-2 flex items-center justify-center select-none cursor-pointer text-center ${className}`}
       >
-        {String(value) || placeholder}
+        <span className="min-w-0 break-words leading-snug line-clamp-2">{String(value) || placeholder}</span>
       </div>
     );
   }
@@ -235,7 +239,7 @@ function DoubleClickInput({
       aria-label={ariaLabel}
       autoFocus
       title={title}
-      className={`w-full bg-white/10 px-2 py-4 text-center focus:outline-none transition-all ${className}`}
+      className={`w-full h-full bg-white/10 px-2 py-1 text-center focus:outline-none transition-all ${className}`}
       value={localVal}
       onChange={e => setLocalVal(e.target.value)}
       onBlur={() => {
@@ -287,24 +291,26 @@ function DesignatorInput({
       <div 
         onDoubleClick={() => setIsFocused(true)}
         title={value.join(', ')}
-        className={`w-full flex items-center justify-center flex-wrap gap-x-1.5 gap-y-1 px-3 py-2 text-xs font-semibold font-mono group-hover:text-white rounded-lg transition-all text-center [text-shadow:0_1px_2px_rgba(0,0,0,0.5)] cursor-text ${
+        className={`w-full h-full flex items-center justify-center px-2 py-1 text-[11px] font-semibold font-mono group-hover:text-white rounded-lg transition-all text-center [text-shadow:0_1px_2px_rgba(0,0,0,0.5)] cursor-text overflow-hidden ${
           isModified ? 'bg-indigo-500/10 ring-1 ring-inset ring-indigo-500/40 shadow-[0_0_10px_rgba(129,140,248,0.2)]' : ''
         }`}
       >
-        {value.map((d, i) => {
-          const clean = d.trim().toUpperCase();
-          const isDup = row.duplicateDesignators?.has(clean);
-          
-          return (
-            <span key={i} className="inline-flex items-center leading-normal">
-              <span className={isDup ? 'text-orange-400 font-black underline underline-offset-4 decoration-orange-500/50' : 'text-white/80'}>
-                {d}
+        <span className="w-full min-w-0 line-clamp-2 leading-snug break-words">
+          {value.map((d, i) => {
+            const clean = d.trim().toUpperCase();
+            const isDup = row.duplicateDesignators?.has(clean);
+
+            return (
+              <span key={i}>
+                <span className={isDup ? 'text-orange-400 font-black underline underline-offset-4 decoration-orange-500/50' : 'text-white/80'}>
+                  {d}
+                </span>
+                {i < value.length - 1 && <span className="opacity-30">, </span>}
               </span>
-              {i < value.length - 1 && <span className="opacity-30 ml-0.5">,</span>}
-            </span>
-          );
-        })}
-        {value.length === 0 && <span className="opacity-20">—</span>}
+            );
+          })}
+          {value.length === 0 && <span className="opacity-20">—</span>}
+        </span>
       </div>
     );
   }
@@ -317,7 +323,7 @@ function DesignatorInput({
         setIsFocused(false);
         onUpdate(local.split(',').map(s => s.trim()).filter(Boolean));
       }}
-      className="w-full bg-white/10 px-3 py-2 text-xs font-black font-mono text-white focus:outline-none rounded-lg transition-all text-center [text-shadow:0_1px_2px_rgba(0,0,0,0.5)] font-medium"
+      className="w-full h-full bg-white/10 px-2 py-1 text-[11px] font-black font-mono text-white focus:outline-none rounded-lg transition-all text-center [text-shadow:0_1px_2px_rgba(0,0,0,0.5)]"
       value={local}
       onChange={e => setLocal(e.target.value)}
       placeholder="—"
@@ -466,7 +472,7 @@ function EditableBOMGrid({
   useEffect(() => {
     if (!jumpTarget || !tableRef.current) return;
 
-    const ROW_HEIGHT = 52;
+    const ROW_HEIGHT = 64;
     const container = tableRef.current;
     
     const targetIdx = filteredData.findIndex(r => r.originalRowIdx === jumpTarget.rowIdx);
@@ -534,7 +540,7 @@ function EditableBOMGrid({
     if (filteredData.length <= 50) {
       return { startIndex: 0, endIndex: filteredData.length, topPadding: 0, bottomPadding: 0 };
     }
-    const ROW_HEIGHT = 52;
+    const ROW_HEIGHT = 64;
     const OVERSCAN = 25; // Generous 1250px buffer prevents scroll edge clipping
     const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
     const endIndex = Math.min(filteredData.length, Math.ceil((scrollTop + 750) / ROW_HEIGHT) + OVERSCAN);
@@ -591,23 +597,23 @@ function EditableBOMGrid({
       <div 
         ref={tableRef} 
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto bom-scroll-stable"
+        className="flex-1 overflow-y-auto overflow-x-hidden bom-scroll-stable"
       >
-        <table className="w-full text-center border-collapse select-none">
+        <table className="w-full table-fixed text-center border-collapse select-none">
           <colgroup>
-            <col style={{ width: '4%' }} />
-            <col style={{ width: '20%' }} />
+            <col style={{ width: '5%' }} />
+            <col style={{ width: '19%' }} />
             <col style={{ width: '8%' }} />
-            <col style={{ width: '24%' }} />
-            <col style={{ width: '24%' }} />
-            <col style={{ width: '20%' }} />
+            <col style={{ width: '30%' }} />
+            <col style={{ width: '26%' }} />
+            <col style={{ width: '12%' }} />
           </colgroup>
           <thead className="sticky top-0 z-[80] shadow-[0_4px_12px_rgba(0,0,0,0.5)]">
             <tr className="bg-[#0b101b] border-b border-white/20">
-              <th className="py-3 px-1 text-[11px] uppercase tracking-[0.3em] text-white/80 font-bold border-r border-white/10 text-center leading-tight" title="Index">#</th>
+              <th className="py-2 px-1 text-[10px] uppercase tracking-wider text-white/80 font-bold border-r border-white/10 text-center leading-tight overflow-hidden" title="Index">#</th>
               
-              <th className="py-3 px-2 text-[11px] uppercase tracking-[0.3em] text-white/80 font-bold border-r border-white/10 text-center relative group" title="Manufacturer Part Number">
-                <div className="flex items-center justify-center gap-1.5 flex-wrap leading-tight">
+              <th className="py-2 px-1 text-[10px] uppercase tracking-wider text-white/80 font-bold border-r border-white/10 text-center relative group overflow-hidden" title="Manufacturer Part Number">
+                <div className="flex items-center justify-center gap-1 flex-wrap leading-tight">
                   MPN
                   <FilterDropdown 
                     column="MPN" 
@@ -620,8 +626,8 @@ function EditableBOMGrid({
                 </div>
               </th>
 
-              <th className="py-3 px-2 text-[11px] uppercase tracking-[0.3em] text-white/80 font-bold border-r border-white/10 text-center relative group" title="Quantity">
-                <div className="flex items-center justify-center gap-1.5 flex-wrap leading-tight">
+              <th className="py-2 px-1 text-[10px] uppercase tracking-wider text-white/80 font-bold border-r border-white/10 text-center relative group overflow-hidden" title="Quantity">
+                <div className="flex items-center justify-center gap-1 flex-wrap leading-tight">
                   Qty
                   <FilterDropdown 
                     column="Qty" 
@@ -634,8 +640,8 @@ function EditableBOMGrid({
                 </div>
               </th>
 
-              <th className="py-3 px-2 text-[11px] uppercase tracking-[0.3em] text-white/80 font-bold border-r border-white/10 text-center relative group" title="Description">
-                <div className="flex items-center justify-center gap-1.5 flex-wrap leading-tight">
+              <th className="py-2 px-1 text-[10px] uppercase tracking-wider text-white/80 font-bold border-r border-white/10 text-center relative group overflow-hidden" title="Description">
+                <div className="flex items-center justify-center gap-1 flex-wrap leading-tight">
                   Description
                   <FilterDropdown 
                     column="Description" 
@@ -648,8 +654,8 @@ function EditableBOMGrid({
                 </div>
               </th>
 
-              <th className="py-3 px-2 text-[11px] uppercase tracking-[0.3em] text-white/80 font-bold border-r border-white/10 text-center relative group" title="Designators / References">
-                <div className="flex items-center justify-center gap-1.5 flex-wrap leading-tight">
+              <th className="py-2 px-1 text-[10px] uppercase tracking-wider text-white/80 font-bold border-r border-white/10 text-center relative group overflow-hidden" title="Designators / References">
+                <div className="flex items-center justify-center gap-1 flex-wrap leading-tight">
                   Designator
                   <FilterDropdown 
                     column="Designator" 
@@ -662,8 +668,8 @@ function EditableBOMGrid({
                 </div>
               </th>
 
-              <th className="py-3 px-2 text-[11px] uppercase tracking-[0.3em] text-white/80 font-bold text-center relative group" title="Component Status">
-                <div className="flex items-center justify-center gap-1.5 flex-wrap leading-tight">
+              <th className="py-2 px-1 text-[10px] uppercase tracking-wider text-white/80 font-bold text-center relative group overflow-hidden" title="Component Status">
+                <div className="flex items-center justify-center gap-1 flex-wrap leading-tight">
                   Status
                   <FilterDropdown 
                     column="Status" 
@@ -689,18 +695,19 @@ function EditableBOMGrid({
                 <tr
                   key={row.originalRowIdx}
                   id={`row-${row.originalRowIdx}`}
+                  style={{ height: `${ROW_HEIGHT}px` }}
                   className={`border-b border-white/20 hover:bg-white/[0.06] transition-colors group bg-black/15 ${highlight} align-middle relative hover:z-[70] ${
                     highlightedRow === row.originalRowIdx ? 'bg-primary/20 ring-2 ring-primary/50 relative z-[75]' : ''
                   }`}
                 >
-                  <td className="p-0 text-[11px] text-white/40 font-mono text-center border-r border-white/20 w-[5%] align-middle overflow-hidden">
+                  <td className="p-0 text-[11px] text-white/40 font-mono text-center border-r border-white/20 align-middle overflow-hidden">
                     <div className="flex items-center justify-center h-full w-full">{row.originalRowIdx}</div>
                   </td>
-                  <td className="p-0 border-r border-white/20 w-[19%] align-middle overflow-hidden text-center">
+                  <td className="p-0 border-r border-white/20 align-middle overflow-hidden text-center">
                     <DoubleClickInput
                       ariaLabel={`Row ${i + 1} MPN`}
                       title={row.mpn}
-                      className={`text-xs font-semibold font-mono ${
+                      className={`text-[11px] font-semibold font-mono ${
                         row.swappedResult ? 'text-indigo-400' : 'text-white/90'
                       }`}
                       value={row.mpn}
@@ -708,7 +715,7 @@ function EditableBOMGrid({
                       placeholder="—"
                     />
                   </td>
-                  <td className="p-0 border-r border-white/20 w-[19%] align-middle text-center overflow-hidden">
+                  <td className="p-0 border-r border-white/20 align-middle text-center overflow-hidden">
                     <DoubleClickInput
                       type="number"
                       isNumber
@@ -723,7 +730,7 @@ function EditableBOMGrid({
                       placeholder="0"
                     />
                   </td>
-                  <td className="p-0 border-r border-white/20 w-[19%] align-middle overflow-hidden text-center">
+                  <td className="p-0 border-r border-white/20 align-middle overflow-hidden text-center">
                     <DoubleClickInput
                       ariaLabel={`Row ${i + 1} Description`}
                       title={row.description || ''}
@@ -733,7 +740,7 @@ function EditableBOMGrid({
                       placeholder="—"
                     />
                   </td>
-                  <td className="p-0 border-r border-white/20 w-[19%] overflow-hidden text-center align-middle">
+                  <td className="p-0 border-r border-white/20 overflow-hidden text-center align-middle">
                     <DesignatorInput 
                       value={row.designators} 
                       onUpdate={(val) => onUpdate(row.originalRowIdx, 'designators', val)} 
@@ -742,8 +749,8 @@ function EditableBOMGrid({
                       row={row}
                     />
                   </td>
-                  <td className="p-0 w-[19%] align-middle text-center overflow-visible">
-                    <div className="flex flex-col items-center justify-center py-4 group/status relative h-full w-full">
+                  <td className="p-0 align-middle text-center overflow-visible">
+                    <div className="flex flex-col items-center justify-center py-2 group/status relative h-full w-full">
                       <div className={`h-3 w-3 rounded-full transition-all duration-500 shadow-glow ${badge.dot}`} />
                       
                       <div className="absolute right-[calc(100%+16px)] top-1/2 -translate-y-1/2 w-64 p-4 rounded-2xl bg-[#080c14] border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.8)] opacity-0 group-hover/status:opacity-100 transition-all duration-300 pointer-events-none z-[110] text-left">
@@ -1291,7 +1298,6 @@ export function BOMDashboard() {
 
   const [refPending, setRefPending] = useState<PendingMapping | null>(null);
   const [targetPending, setTargetPending] = useState<PendingMapping | null>(null);
-  const [comparison, setComparison] = useState<BOMDiff | null>(null);
 
   // PnP Validator state
   const [pnpFile, setPnpFile] = useState<PnPFileData<PnPRow> | null>(null);
@@ -1399,6 +1405,11 @@ export function BOMDashboard() {
 
   const analyzerActivities = useMemo(() => activities.filter(a => a.mode === 'analyzer'), [activities]);
 
+  // Whether the user has explicitly started a comparison. The diff itself is
+  // always derived live from the current rows, so the report panel, the status
+  // dots and the summary counters can never disagree.
+  const [hasCompared, setHasCompared] = useState(false);
+
   // Reactive Comparison Engine
   const comparisonResult = useMemo(() => {
     if (activeTab === 'comparator' && refFile.rows.length && targetFile.rows.length) {
@@ -1407,10 +1418,11 @@ export function BOMDashboard() {
     return null;
   }, [refFile.rows, targetFile.rows, activeTab]);
 
-  // Sync comparison state with memoized result - MANUAL ONLY
+  const comparison = hasCompared ? (comparisonResult?.diff ?? null) : null;
+
   const handleStartComparison = () => {
     if (comparisonResult) {
-      setComparison(comparisonResult.diff);
+      setHasCompared(true);
       const diffCount = comparisonResult.diff.missing.length + comparisonResult.diff.extra.length;
       addActivity('Comparison Complete', `Identified ${diffCount} primary discrepancies between BOMs.`, 'success');
     }
@@ -1527,14 +1539,14 @@ export function BOMDashboard() {
     setRefHistory([file]);
     setRefPointer(0);
     setRefFilters({});
-    setComparison(null);
+    setHasCompared(false);
   };
   const resetTargetHistory = (file: FileState) => {
     setTargetFile(file);
     setTargetHistory([file]);
     setTargetPointer(0);
     setTargetFilters({});
-    setComparison(null);
+    setHasCompared(false);
   };
 
   // ── Analyzer Upload ─────────────────────────────────────────────────────────
@@ -1702,7 +1714,7 @@ export function BOMDashboard() {
     const nextRow = { ...nextRows[realIdx], [field]: val };
     
     // Live Row Validation: Recalculate Qty Mismatch for the modified row
-    nextRow.qtyMismatch = nextRow.qty !== nextRow.designators.length;
+    nextRow.qtyMismatch = BOMProcessor.isQtyMismatch(nextRow.qty, nextRow.designators);
     
     // Add field to modified set ONLY IF it changed from the ORIGINAL data
     const modifiedFields = new Set(nextRow.modifiedFields || []);
@@ -1761,7 +1773,7 @@ export function BOMDashboard() {
       case 'validate': {
         const validNextRows = nextRows.map(r => ({
           ...r,
-          qtyMismatch: r.qty !== r.designators.length
+          qtyMismatch: BOMProcessor.isQtyMismatch(r.qty, r.designators)
         }));
         const valDups = BOMProcessor.findSelfDuplicates(validNextRows);
         nextRows = validNextRows.map(r => ({
@@ -1876,7 +1888,7 @@ export function BOMDashboard() {
         });
         return {
           ...r,
-          qtyMismatch: r.qty !== r.designators.length,
+          qtyMismatch: BOMProcessor.isQtyMismatch(r.qty, r.designators),
           duplicate: rowDups.size > 0,
           duplicateDesignators: rowDups
         };
@@ -2396,7 +2408,7 @@ export function BOMDashboard() {
                   <button
                     onClick={() => {
                       if (activeTab === 'analyzer') commit('analyzer', emptyFile());
-                      else { setRefFile(emptyFile()); setTargetFile(emptyFile()); setComparison(null); }
+                      else { setRefFile(emptyFile()); setTargetFile(emptyFile()); setHasCompared(false); }
                     }}
                     title="Clear all loaded data"
                     className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-white/40 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-400/20 transition-all duration-200 cursor-pointer"
@@ -2694,7 +2706,7 @@ export function BOMDashboard() {
                         <div className="flex flex-col items-center gap-3">
                           <p className="text-xs text-emerald-400/60 font-mono">{refFile.filename} · {refFile.rows.length} rows</p>
                           <button 
-                            onClick={() => { setRefFile(emptyFile()); setComparison(null); }}
+                            onClick={() => { setRefFile(emptyFile()); setHasCompared(false); }}
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-white/20 hover:text-red-400/60 hover:bg-red-400/5 transition-all cursor-pointer border border-transparent hover:border-red-400/20"
                           >
                             <Trash2 className="h-3 w-3" />
@@ -2721,7 +2733,7 @@ export function BOMDashboard() {
                         <div className="flex flex-col items-center gap-3">
                           <p className="text-xs text-emerald-400/60 font-mono">{targetFile.filename} · {targetFile.rows.length} rows</p>
                           <button 
-                            onClick={() => { setTargetFile(emptyFile()); setComparison(null); }}
+                            onClick={() => { setTargetFile(emptyFile()); setHasCompared(false); }}
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-white/20 hover:text-red-400/60 hover:bg-red-400/5 transition-all cursor-pointer border border-transparent hover:border-red-400/20"
                           >
                             <Trash2 className="h-3 w-3" />
@@ -2771,7 +2783,7 @@ export function BOMDashboard() {
                           isSmall
                         />
                         <button 
-                          onClick={() => { setRefFile(emptyFile()); setComparison(null); }}
+                          onClick={() => { setRefFile(emptyFile()); setHasCompared(false); }}
                           className="text-[9px] font-black uppercase tracking-widest text-white/20 hover:text-red-400/60 transition-all cursor-pointer"
                         >
                           Clear
@@ -2787,7 +2799,7 @@ export function BOMDashboard() {
                           isSmall
                         />
                         <button 
-                          onClick={() => { setTargetFile(emptyFile()); setComparison(null); }}
+                          onClick={() => { setTargetFile(emptyFile()); setHasCompared(false); }}
                           className="text-[9px] font-black uppercase tracking-widest text-white/20 hover:text-red-400/60 transition-all cursor-pointer"
                         >
                           Clear
@@ -2855,7 +2867,7 @@ export function BOMDashboard() {
                         </button>
 
                         <button
-                          onClick={() => { setRefFile(emptyFile()); setTargetFile(emptyFile()); setComparison(null); }}
+                          onClick={() => { setRefFile(emptyFile()); setTargetFile(emptyFile()); setHasCompared(false); }}
                           title="Clear both files and reset the comparator"
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white/40 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-400/30 transition-all cursor-pointer whitespace-nowrap"
                         >

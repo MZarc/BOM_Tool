@@ -78,6 +78,11 @@ const DESC_ALIASES = [
 
 // Combined set for header row scoring
 const ALL_BOM_KEYWORDS = new Set([...MPN_ALIASES, ...QTY_ALIASES, ...REF_ALIASES, ...DESC_ALIASES]);
+// Precomputed array — avoids re-spreading the Set for every cell while scoring.
+const ALL_BOM_KEYWORDS_ARRAY = [...ALL_BOM_KEYWORDS];
+
+// Headers that must never be treated as the quantity column (e.g. "Total Price").
+const QTY_BLOCKED = /price|cost|rate|usd|\$/;
 
 export class BOMProcessor {
   static get MPN_ALIASES() { return MPN_ALIASES; }
@@ -85,37 +90,47 @@ export class BOMProcessor {
   static get REF_ALIASES() { return REF_ALIASES; }
 
   /** Auto-detect column mapping from Excel headers */
-  /** Auto-detect column mapping from Excel headers */
   static autoMapHeaders(headers: string[]): ColumnMapping {
     const mapping: ColumnMapping = { mpn: null, qty: null, designators: null, description: null };
-    
-    const findBest = (aliases: string[]) => {
-      const lowerHeaders = headers.map(h => ({ original: h, lower: h.toLowerCase().trim() }));
-      
+
+    const lowerHeaders = headers.map((h, index) => ({
+      original: h,
+      lower: String(h ?? '').toLowerCase().trim(),
+      index,
+    }));
+    // Track consumed columns so the same header can never fill two roles.
+    const used = new Set<number>();
+
+    const findBest = (aliases: string[], blocked?: RegExp): string | null => {
+      const candidates = lowerHeaders.filter(
+        h => h.lower.length > 0 && !used.has(h.index) && (!blocked || !blocked.test(h.lower))
+      );
+
       // Phase 1: Exact match
       for (const a of aliases) {
-        const found = lowerHeaders.find(h => h.lower === a);
-        if (found) return found.original;
+        const found = candidates.find(h => h.lower === a);
+        if (found) { used.add(found.index); return found.original; }
       }
-      
-      // Phase 2: Start with
+
+      // Phase 2: Starts with (single-character aliases are too greedy)
       for (const a of aliases) {
-        const found = lowerHeaders.find(h => h.lower.startsWith(a));
-        if (found) return found.original;
+        if (a.length < 2) continue;
+        const found = candidates.find(h => h.lower.startsWith(a));
+        if (found) { used.add(found.index); return found.original; }
       }
-      
+
       // Phase 3: Contains (only for longer aliases to avoid false positives)
       for (const a of aliases) {
         if (a.length < 3) continue;
-        const found = lowerHeaders.find(h => h.lower.includes(a));
-        if (found) return found.original;
+        const found = candidates.find(h => h.lower.includes(a));
+        if (found) { used.add(found.index); return found.original; }
       }
-      
+
       return null;
     };
 
     mapping.mpn = findBest(MPN_ALIASES);
-    mapping.qty = findBest(QTY_ALIASES);
+    mapping.qty = findBest(QTY_ALIASES, QTY_BLOCKED);
     mapping.designators = findBest(REF_ALIASES);
     mapping.description = findBest(DESC_ALIASES);
 
@@ -126,22 +141,46 @@ export class BOMProcessor {
   static scoreRowAsHeader(row: unknown[]): number {
     let score = 0;
     for (const cell of row) {
-      if (typeof cell !== 'string' || cell.trim().length < 2) continue;
+      if (typeof cell !== 'string') continue;
       const lower = cell.toLowerCase().trim();
+      if (lower.length < 2) continue;
       if (ALL_BOM_KEYWORDS.has(lower)) {
         score += 3; // exact match — very likely a header cell
-      } else if ([...ALL_BOM_KEYWORDS].some(k => lower.includes(k) || k.includes(lower.split(' ')[0]))) {
-        score += 1; // partial match
-      } else if (cell.trim().length > 2) {
-        score += 0.1; // any non-empty string adds a tiny bit
+      } else {
+        const firstWord = lower.split(/\s+/)[0];
+        const partial = ALL_BOM_KEYWORDS_ARRAY.some(
+          k => lower.includes(k) || (firstWord.length >= 3 && k.startsWith(firstWord))
+        );
+        score += partial ? 1 : 0.1; // partial / any other non-empty string
       }
     }
     return score;
   }
 
+  /**
+   * Single source of truth for "row quantity does not match its designators".
+   * A positive quantity with zero designators is a mismatch too (you cannot
+   * place parts that have no reference). Every mode uses this exact rule.
+   */
+  static isQtyMismatch(qty: number, designators: string[]): boolean {
+    return qty !== designators.length;
+  }
+
   /** Check if all three required columns are mapped */
   static isMappingComplete(mapping: ColumnMapping): boolean {
     return !!(mapping.mpn && mapping.qty && mapping.designators);
+  }
+
+  /** Build a stable, duplicate-safe header list (matches XLSX's `_1` suffix convention). */
+  static buildHeaders(headerRow: unknown[]): string[] {
+    const seen = new Map<string, number>();
+    return headerRow.map((h, idx) => {
+      let name = String(h ?? '').replace(/\r?\n/g, ' ').trim();
+      if (!name) name = `_COL_${idx}`;
+      const count = seen.get(name) ?? 0;
+      seen.set(name, count + 1);
+      return count === 0 ? name : `${name}_${count}`;
+    });
   }
 
   /** Find the best header row in a 2D array */
@@ -159,15 +198,17 @@ export class BOMProcessor {
       }
     }
 
-    if (headerRowIdx === -1 || bestScore < 1) {
-      for (let i = 0; i < SCAN_DEPTH; i++) {
-        const row = raw[i] ?? [];
-        const nonEmpty = (row as unknown[]).filter((c: unknown) => typeof c === 'string' && (c as string).trim().length > 1);
-        if (nonEmpty.length >= 3) return i;
-      }
+    // Only trust a row that actually matched BOM keywords. Weak noise scores
+    // (0.1 per generic string) must not beat the positional fallback.
+    if (bestScore >= 1 && headerRowIdx !== -1) return headerRowIdx;
+
+    for (let i = 0; i < SCAN_DEPTH; i++) {
+      const row = raw[i] ?? [];
+      const nonEmpty = (row as unknown[]).filter((c: unknown) => typeof c === 'string' && (c as string).trim().length > 1);
+      if (nonEmpty.length >= 3) return i;
     }
 
-    return headerRowIdx === -1 ? 0 : headerRowIdx;
+    return 0;
   }
 
   /** Alias for autoMapHeaders */
@@ -212,6 +253,13 @@ export class BOMProcessor {
     let lastPrefix = '';
 
     for (const part of parts) {
+      // 0. Decimal values like "R1.5" are single designators, not ranges
+      if (/^[A-Za-z][A-Za-z ]*\d+\.\d+$/.test(part)) {
+        const prefixMatch = part.match(/^([A-Za-z][A-Za-z ]*?)(\d+)$/i);
+        if (prefixMatch) lastPrefix = prefixMatch[1];
+        expanded.push(part);
+        continue;
+      }
       // 1. Check for ranges like R1-R5, R1 to R5, R C 1-R C 5, etc.
       // Updated regex to support spaces in prefixes (e.g., "R C")
       const rangeMatch = part.match(/^([A-Za-z][A-Za-z ]*?)(\d+)\s*(-|to|\.{1,}|[~\u2013\u2014])\s*(?:[A-Za-z][A-Za-z ]*?)?(\d+)$/i);
@@ -254,6 +302,18 @@ export class BOMProcessor {
     return { cleaned, duplicates };
   }
 
+  /** Parse a quantity cell, tolerating "1,000" and "1 pcs" style values. */
+  private static parseQtyValue(raw: unknown): number {
+    if (typeof raw === 'number') return Math.floor(raw) || 0;
+    let str = String(raw ?? '').trim();
+    if (!str) return 0;
+    // Strip thousands separators only when they follow the 3-digit grouping rule
+    // (so European decimals like "1,5" are left alone).
+    if (/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(str)) str = str.replace(/,/g, '');
+    const n = parseFloat(str);
+    return Number.isFinite(n) ? Math.floor(n) : 0;
+  }
+
   /** Parse raw data rows using a given column mapping */
   static parseBOMWithMapping(rawData: Record<string, unknown>[], mapping: ColumnMapping, headerRowIdx: number = 0): BOMRow[] {
     const globalCounts = new Map<string, number>();
@@ -271,10 +331,7 @@ export class BOMProcessor {
     const result: BOMRow[] = [];
     rawData.forEach((row, idx) => {
       const mpn = mapping.mpn ? String(row[mapping.mpn] ?? '').trim() : '';
-      const rawQtyVal = mapping.qty ? row[mapping.qty] : undefined;
-      const qtyStr = String(rawQtyVal ?? '0');
-      // Fix: parseFloat then floor to handle some scientific notation or string decimals
-      const qty = Math.floor(parseFloat(qtyStr)) || 0;
+      const qty = mapping.qty ? this.parseQtyValue(row[mapping.qty]) : 0;
       const description = mapping.description ? String(row[mapping.description] ?? '').trim() : '';
       const rawDesStr = mapping.designators ? String(row[mapping.designators] ?? '') : '';
       
@@ -298,7 +355,7 @@ export class BOMProcessor {
         rawDesignators: rawDesStr,
         duplicate: rowDups.size > 0,
         duplicateDesignators: rowDups,
-        qtyMismatch: designators.length > 0 && designators.length !== finalQty,
+        qtyMismatch: this.isQtyMismatch(finalQty, designators),
         modifiedFields: new Set(), // No automatic formatting, so no modified fields initially
         originalRowIdx: (row.__rowIdx as number ?? (idx + headerRowIdx + 1)) + 1,
         originalData: {
@@ -337,52 +394,20 @@ export class BOMProcessor {
     const raw: unknown[][] = sheetToJson(ws, { header: 1, defval: '' });
     if (!raw.length) return EMPTY_RESULT;
 
-    // --- Step 1: Find header row by scoring ---
-    const SCAN_DEPTH = Math.min(raw.length, 25);
-    let bestScore = 0;
-    let headerRowIdx = -1;
-
-    for (let i = 0; i < SCAN_DEPTH; i++) {
-      const row = raw[i] ?? [];
-      const score = this.scoreRowAsHeader(row);
-      if (score > bestScore) {
-        bestScore = score;
-        headerRowIdx = i;
-      }
-    }
-
-    // Fallback: first row with ≥3 non-empty string cells
-    if (headerRowIdx === -1 || bestScore < 1) {
-      for (let i = 0; i < SCAN_DEPTH; i++) {
-        const row = raw[i] ?? [];
-        const nonEmpty = (row as unknown[]).filter((c: unknown) => typeof c === 'string' && (c as string).trim().length > 1);
-        if (nonEmpty.length >= 3) { headerRowIdx = i; break; }
-      }
-    }
-
-    if (headerRowIdx === -1) headerRowIdx = 0;
+    // --- Step 1: Find header row by scoring (shared with the PnP flow) ---
+    const headerRowIdx = this.findHeaderRow(raw);
 
     // --- Step 2: Build header array with positional placeholders for blank cells ---
-    const headerRow = raw[headerRowIdx] as unknown[];
-    const headers: string[] = headerRow.map((h: unknown, idx: number) => {
-      const str = String(h ?? '').replace(/\r?\n/g, ' ').trim();
-      return str.length > 0 ? str : `_COL_${idx}`;
-    });
+    const headers = this.buildHeaders(raw[headerRowIdx] ?? []);
 
     // --- Step 3: Build data rows ---
+    // Only fully empty rows are skipped. Sparse data rows (e.g. a text qty and
+    // no description) are still valid BOM rows and must not be dropped.
     const dataRows: Record<string, unknown>[] = [];
     for (let i = headerRowIdx + 1; i < raw.length; i++) {
       const row = raw[i] ?? [] as unknown[];
-      // Skip rows that are entirely empty
       const hasData = (row as unknown[]).some((c: unknown) => c !== '' && c !== null && c !== undefined);
       if (!hasData) continue;
-      // Skip rows that look like footer/signature lines (all strings, no numbers at all)
-      const numericCells = (row as unknown[]).filter((c: unknown) => typeof c === 'number');
-      const stringCells = (row as unknown[]).filter((c: unknown) => typeof c === 'string' && (c as string).trim().length > 1);
-      if (stringCells.length > 0 && numericCells.length === 0 && stringCells.length < 3) {
-        // Likely a notes/signature row — skip
-        continue;
-      }
       const obj: Record<string, unknown> = { __rowIdx: i };
       headers.forEach((h, idx) => { obj[h] = (row as unknown[])[idx] ?? ''; });
       dataRows.push(obj);
@@ -430,7 +455,7 @@ export class BOMProcessor {
         designators: cleaned, 
         duplicate: rowDups.size > 0, 
         duplicateDesignators: rowDups,
-        qtyMismatch: cleaned.length > 0 && cleaned.length !== row.qty, 
+        qtyMismatch: this.isQtyMismatch(row.qty, cleaned), 
         modifiedFields 
       };
     });

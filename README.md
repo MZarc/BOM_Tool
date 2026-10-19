@@ -1,143 +1,245 @@
 <div align="center">
 
-  <img src="public/icon.png" alt="BOM Tool Icon" width="120" />
+  <img src="public/icon.png" alt="BOM Tool" width="128" />
 
   # BOM Tool
 
-  > **Production-Ready Hardware BOM & Pick-and-Place (PNP) Validation Engine**
+  **Desktop BOM analysis, comparison and Pick-and-Place validation.**
+  Local-first. No uploads. No telemetry.
 
-  [![Electron](https://img.shields.io/badge/Electron-30.0.1-47A248?style=flat&logo=electron&logoColor=white)](https://www.electronjs.org/)
-  [![React](https://img.shields.io/badge/React-18.2.0-61DAFB?style=flat&logo=react&logoColor=black)](https://react.dev/)
-  [![TypeScript](https://img.shields.io/badge/TypeScript-5.2-3178C6?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-  [![Vite](https://img.shields.io/badge/Vite-5.1-646CFF?style=flat&logo=vite&logoColor=white)](https://vitejs.dev/)
-  [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+  [![Version](https://img.shields.io/badge/version-1.2.5-22d3ee?style=flat-square)](package.json)
+  [![Electron](https://img.shields.io/badge/Electron-30-47848F?style=flat-square&logo=electron&logoColor=white)](https://www.electronjs.org/)
+  [![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
+  [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+  [![Vite](https://img.shields.io/badge/Vite-5-646CFF?style=flat-square&logo=vite&logoColor=white)](https://vitejs.dev/)
+  [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
+
+  [![Windows](https://img.shields.io/badge/platform-Windows%20x64-0078D6?style=flat-square&logo=windows&logoColor=white)](#build--release)
 
 </div>
 
-A high-performance desktop engineering utility engineered for hardware manufacturing, SMT assembly, and component procurement teams to manage, compare, validate, and export Bills of Materials (BOM) and Pick-and-Place (PNP) data with zero data loss.
+---
+
+## What it does
+
+**BOM Tool** is an Electron desktop app for hardware and SMT engineers who need to
+get a bill of materials from a spreadsheet into a trustworthy state — and keep it
+that way between revisions.
+
+Open a workbook, let the app find the header row and map the columns, then edit,
+normalize and validate in place. Export writes back into the **original workbook**
+with ExcelJS, so fonts, fills, merged cells, logos and template layout survive the
+round trip.
+
+| Workspace | What it answers |
+| :-- | :-- |
+| 🗂 **BOM Analyzer** | Is this single BOM internally consistent? |
+| ⇄ **Comparator** | What changed between the reference and the new revision? |
+| 📍 **PnP Validator** | Does this pick-and-place file match the BOM? |
+
+Everything runs locally in the renderer. Files are read into memory and never leave
+the machine.
 
 ---
 
-## 📸 Overview
+## Workspaces
 
-In PCB manufacturing, component mismatches, designator oversights, or modified MPNs between hardware revisions cause costly production delays and scrap boards. 
+### 🗂 BOM Analyzer
 
-**BOM Tool** solves this by providing instant $O(N)$ differential analysis between reference and target BOMs, auto-validating component designators against Pick & Place files, and exporting publication-ready Excel reports that **preserve original corporate headers, logos, and custom template styles**.
+Load one BOM (`.xlsx`, `.xls`, `.csv`) and clean it up before it goes anywhere else.
+
+- **Header detection** — scans the first rows for header keywords so title blocks and
+  logos above the table don't break the import.
+- **Automatic column mapping** — recognizes common aliases for MPN, quantity,
+  designators and description; falls back to an interactive mapping dialog, and lets
+  you re-map at any time.
+- **Multi-sheet workbooks** — pick the sheet to parse.
+- **Editable grid** — edit MPN, qty, description and designators directly. Designator
+  edits are split into a clean list and re-checked against the row quantity immediately.
+- **History** — every committed edit is a step in the per-file undo/redo stack.
+- **Tools**
+  - **Normalize** — canonicalizes designator separators/spacing.
+  - **Expand** — turns ranges such as `R1-R5` into `R1,R2,R3,R4,R5`.
+  - **Validate** — recomputes duplicate designators and quantity mismatches.
+- **Per-column filters**, **row search** (`Ctrl/Cmd+F`) and a **status ledger** that
+  explains every flagged row.
+- **Export** — writes the edited rows back into the original workbook and appends an
+  **Analyzer Report** sheet for the last tool run.
+
+### ⇄ Comparator
+
+Drop a reference BOM and a target BOM. The diff recomputes live from the current
+grids, so edits made after opening the report are reflected immediately.
+
+Reported categories:
+
+| Category | Meaning |
+| :-- | :-- |
+| **Missing** | MPN exists in the reference but not in the target |
+| **Extra** | MPN exists in the target but not in the reference |
+| **Qty mismatch** | Same MPN, different summed quantity across all rows |
+| **Swapped** | Same designator is assigned to a different MPN in each file |
+| **Duplicate (self)** | The same designator appears more than once within one file |
+| **Qty error (self)** | A row's quantity does not equal its designator count |
+| **Designator overlap** | Shared MPN whose designator sets differ between files |
+
+Also included: row-level status dots with an explanatory tooltip, **Sync MPN from
+reference** for swapped rows, and jump-to-row from the report.
+
+### 📍 PnP Validator
+
+Upload the placement file and the BOM it was generated from.
+
+- **Placement input** — Altium-style `.txt` / `.csv` (tab, comma, semicolon or pipe
+  delimited, quoted fields supported) or a spreadsheet (`.xlsx`, `.xls`).
+- **BOM input** — the same spreadsheet pipeline as the Analyzer, including header
+  detection and column mapping.
+- Matching is by **designator** (trimmed, case-insensitive).
+- Each designator gets one status:
+
+| Status | Meaning |
+| :-- | :-- |
+| **Match** | Present in both, and descriptions agree |
+| **Mismatch** | Present in both, descriptions differ |
+| **Not in BOM** | Placement designator has no BOM entry |
+| **Not in PnP** | BOM designator is absent from the placement file |
+
+If the placement file has no description column (or all descriptions are empty), the
+description check is skipped and presence alone is validated. Results can be filtered
+to mismatches or missing items, and searched.
 
 ---
 
-## ✨ Key Features
+## Export fidelity
 
-### ⚡ 1. High-Performance Differential BOM Comparator
-- **Instantaneous Comparison:** Rapid $O(N)$ differential engine capable of processing 10,000+ line items in milliseconds.
-- **Mismatch Categorization:** Automatically categorizes differences into:
-  - 🔴 **Missing Items:** Components in Reference but absent in Target.
-  - 🟢 **Extra Items:** Components added in Target BOM.
-  - 🟡 **Quantity Mismatches:** Discrepancies in total part counts.
-  - 🔵 **MPN / Value Swaps:** Substituted or altered Manufacturer Part Numbers.
+Most CSV/XLSX exporters rebuild the sheet from scratch. This one does not:
 
-### 🎯 2. Pick & Place (PNP) File Validator
-- Validates SMT placement files against master BOM lists.
-- Checks designator counts (e.g., `C1, C2, C3`).
-- Highlights unplaced BOM parts and unlisted PNP designators.
+1. The original file buffer is kept in memory from the moment it is opened.
+2. On export, ExcelJS loads that buffer and updates only the mapped cells.
+3. Existing styles, merged cells, images and template structure are left untouched.
+4. The report sheet (`Analyzer Report` or `Comparison Analysis`) is added or replaced.
+5. The workbook is saved through a native save dialog.
 
-### 📊 3. High-Fidelity Template-Preserving Excel Export (ExcelJS)
-- Unlike standard CSV or XLSX exporters that strip formatting, **BOM Tool** uses `ExcelJS` to inject differential status columns while preserving corporate title blocks, logos, merged cells, fonts, and custom color fills.
-
-### 🤖 4. Intelligent Heuristic Column Mapping
-- Automatically identifies and maps non-standard column headers across vendor spreadsheets (e.g., `MPN`, `Manf Part #`, `Qty`, `Quantity`, `RefDes`, `Designators`, `Description`).
-- Includes interactive manual mapping overrides for complex non-standard templates.
-
-### 🎨 5. Liquid Glass Modern UI
-- Premium dark/light interface designed with modern glassmorphism aesthetic.
-- Fluid micro-animations powered by **Framer Motion** and **Tailwind CSS**.
-- Built-in universal instant search & custom status filtering.
+If the original buffer is unavailable, the app refuses the export rather than
+silently producing a stripped-down file.
 
 ---
 
-## 🛠 Tech Stack
+## Tech stack
 
-| Domain | Technology | Description |
-| :--- | :--- | :--- |
-| **Desktop Shell** | [Electron 30](https://www.electronjs.org/) | Cross-platform desktop runtime |
-| **Frontend Framework** | [React 18](https://react.dev/) + [TypeScript 5](https://www.typescriptlang.org/) | Type-safe UI components |
-| **Build Tool** | [Vite 5](https://vitejs.dev/) | Lightning-fast development & bundling |
-| **Excel Parsing** | [SheetJS (XLSX)](https://sheetjs.com/) | Rapid memory extraction of `.xlsx`, `.xls`, `.csv` |
-| **Excel Exporting** | [ExcelJS](https://github.com/exceljs/exceljs) | High-fidelity template preservation |
-| **Styling & UI** | [Tailwind CSS v4](https://tailwindcss.com/) + [Framer Motion](https://www.framer.com/motion/) | Responsive design & smooth animations |
-| **Icons** | [Lucide React](https://lucide.dev/) | Clean vector iconography |
+| Layer | Choice |
+| :-- | :-- |
+| Desktop shell | Electron 30 |
+| UI | React 18 + TypeScript 5 |
+| Bundler | Vite 5 + `vite-plugin-electron` |
+| Styling | Tailwind CSS 4 |
+| Animation | Framer Motion |
+| Icons | Lucide React |
+| Reading spreadsheets | SheetJS (`xlsx`) |
+| Writing spreadsheets | ExcelJS |
 
 ---
 
-## 📂 Project Structure
+## Project structure
 
-```
+```text
 BOM_Tool/
-├── electron/                 # Electron main & preload processes
-│   ├── main.ts               # IPC handlers, window management, auto-updates
-│   ├── preload.ts            # Secure contextBridge API bindings
-│   └── electron-env.d.ts     # Process environment type definitions
+├── electron/
+│   ├── main.ts                 # window lifecycle, IPC handlers (save dialog, window, links)
+│   └── preload.ts              # contextBridge IPC bridge
 ├── src/
-│   ├── components/           # React UI components
-│   │   ├── bom-dashboard.tsx # Main BOM Comparison Workspace & Table Viewer
-│   │   ├── pnp-validator.tsx # Pick & Place Validation Interface
-│   │   ├── SplashScreen.tsx  # Animated app launcher screen
-│   │   └── ui/               # Reusable UI primitives (Dialogs, Search, Buttons)
-│   ├── lib/                  # Core domain logic
-│   │   └── bom/
-│   │       ├── bom-processor.ts # Excel parsing, column mapping & template engine
-│   │       ├── bom-compare.ts   # O(N) differential comparison engine
-│   │       └── pnp-parser.ts    # Pick & Place placement parser
-│   ├── App.tsx               # Root application router & shell
-│   └── main.tsx              # React entry point
-├── samples/                  # Sample test spreadsheets (e.g., pnp.xlsx)
-├── public/                   # Static application assets & icons
-├── electron-builder.json5   # Desktop packager & release configuration
-├── package.json              # Dependencies & build scripts
-└── vite.config.ts            # Vite & Electron integration configuration
+│   ├── components/
+│   │   ├── bom-dashboard.tsx   # Analyzer + Comparator workspaces, grid, export
+│   │   ├── pnp-validator.tsx   # PnP validation workspace
+│   │   ├── SplashScreen.tsx    # animated launch screen
+│   │   └── ui/                 # reusable dialogs, search, filters, buttons
+│   ├── lib/bom/
+│   │   ├── bom-processor.ts    # parsing, header/column mapping, designator logic
+│   │   ├── bom-compare.ts      # single-pass Map/Set comparison engine
+│   │   └── pnp-parser.ts       # delimited placement-file parser
+│   ├── App.tsx
+│   └── main.tsx
+├── samples/pnp.xlsx            # sample Altium-style placement export
+├── public/                     # app + installer artwork
+├── electron-builder.json5      # packaging configuration
+└── vite.config.ts
 ```
 
 ---
 
-## 🚀 Getting Started
+## Getting started
 
-### Prerequisites
-- **Node.js**: `v18.0.0` or higher
-- **npm**: `v9.0.0` or higher
+**Requirements:** Node.js 18+ and npm 9+.
 
-### 1. Clone the Repository
 ```bash
 git clone https://github.com/MZarc/BOM_Tool.git
 cd BOM_Tool
-```
-
-### 2. Install Dependencies
-```bash
 npm install
-```
-
-### 3. Run Development Server
-Launches the Vite dev server and Electron app simultaneously with hot-reload enabled:
-```bash
 npm run dev
 ```
 
-### 4. Build Desktop Executable
-Compiles TypeScript, bundles frontend assets with Vite, and builds standalone Windows/macOS binaries via `electron-builder`:
+`npm run dev` starts the Vite dev server; `vite-plugin-electron` launches the Electron
+window against it with hot reload.
+
+### Scripts
+
+| Command | Does |
+| :-- | :-- |
+| `npm run dev` | Vite dev server + Electron |
+| `npm run lint` | ESLint, zero warnings allowed |
+| `npm run build` | `tsc` → `vite build` → `electron-builder` |
+
+### Build & release
+
 ```bash
 npm run build
 ```
-Output executables will be placed in the `release/` directory.
+
+Output for the current version:
+
+```text
+release/1.2.5/
+├── BOM Tool-Windows-1.2.5-Setup.exe   # NSIS installer, x64
+└── win-unpacked/                      # unpacked application
+```
+
+`electron-builder.json5` also declares macOS (DMG) and Linux (AppImage) targets, but
+only the Windows x64 NSIS target is built and exercised here.
 
 ---
 
-## 🔒 Security & Best Practices
+## Keyboard
 
-- **Code Signing:** Certificates (`.pfx`) are excluded from source control. Provide code signing secrets via environment variables during CI/CD builds.
-- **Local File Security:** Electron main process operates with restricted `nodeIntegration: false` and secure `contextBridge` IPC channels.
+| Shortcut | Action |
+| :-- | :-- |
+| `Ctrl/Cmd + F` | Universal search for the active workspace |
+
+Undo/redo are available from the toolbar buttons next to the file name; history is
+kept per file.
 
 ---
 
-## 📄 License
+## Notes and limitations
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+- **Unsigned build.** No code-signing certificate is configured, so Windows
+  SmartScreen may warn on first launch.
+- **Renderer security model.** The renderer has no Node integration. A preload script
+  exposes a general IPC bridge (`send` / `invoke` / `on`) to the main process for the
+  save dialog, window controls and opening external links.
+- **Optional certificate bootstrap.** `electron/main.ts` checks for
+  `Meet_Mistry_cert.pfx` and, only if the file is present, asks for elevation to add
+  it to the Windows Root and TrustedPublisher stores. The certificate is not included
+  in this repository (`.pfx` is git-ignored) nor in the published installer.
+- **Fixed window.** The window opens maximized and resizing is disabled by design.
+- Validation is deterministic string/number logic over the parsed rows; it does not
+  consult external part databases.
+
+---
+
+## License
+
+MIT © 2026 Meet Mistry — see [LICENSE](LICENSE).
+
+<div align="center">
+  <sub>Built for hardware teams that would rather catch the mistake before the board is fabricated.</sub>
+</div>

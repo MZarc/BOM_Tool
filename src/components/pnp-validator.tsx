@@ -99,7 +99,7 @@ export function PnPValidator({
           const ws = wb.Sheets[name];
           const sheetData = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as unknown[][];
           const headerIdx = BOMProcessor.findHeaderRow(sheetData);
-          const headers = (sheetData[headerIdx] || []) as string[];
+          const headers = BOMProcessor.buildHeaders(sheetData[headerIdx] || []);
           const initialMapping = BOMProcessor.autoMapHeaders(headers);
           const rawData = XLSX.utils.sheet_to_json(ws, { range: headerIdx, defval: '' }) as Record<string, unknown>[];
           
@@ -171,7 +171,7 @@ export function PnPValidator({
         const ws = wb.Sheets[name];
         const sheetData = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as unknown[][];
         const headerIdx = BOMProcessor.findHeaderRow(sheetData);
-        const headers = (sheetData[headerIdx] || []) as string[];
+        const headers = BOMProcessor.buildHeaders(sheetData[headerIdx] || []);
         const initialMapping = BOMProcessor.autoMapHeaders(headers);
         const rawData = XLSX.utils.sheet_to_json(ws, { range: headerIdx, defval: '' }) as Record<string, unknown>[];
 
@@ -629,14 +629,14 @@ export function PnPValidator({
               <div 
                 ref={tableRef} 
                 onScroll={handleScroll}
-                className="flex-1 overflow-y-auto bom-scroll-stable"
+                className="flex-1 overflow-y-auto overflow-x-hidden bom-scroll-stable"
               >
                 {/* Sticky Header */}
-                <div className="grid grid-cols-[100px_1fr_1fr_150px] border-b border-white/30 bg-[#080d19] shadow-xl bom-thead shrink-0">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-white/50 py-3 text-center border-r border-white/30 truncate">Designator</span>
-                  <span className="text-[10px] font-black uppercase tracking-widest text-white/50 py-3 text-center border-r border-white/30 truncate">PnP Description</span>
-                  <span className="text-[10px] font-black uppercase tracking-widest text-white/50 py-3 text-center border-r border-white/30 truncate">BOM Description</span>
-                  <div className="text-[10px] font-black uppercase tracking-widest text-white/50 py-3 text-center flex items-center justify-center gap-2 relative group">
+                <div className="grid grid-cols-[minmax(72px,90px)_minmax(0,1fr)_minmax(0,1fr)_minmax(96px,120px)] border-b border-white/30 bg-[#080d19] shadow-xl bom-thead shrink-0">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-white/50 py-3 px-1 text-center border-r border-white/30 truncate">Designator</span>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-white/50 py-3 px-2 text-center border-r border-white/30 truncate">PnP Description</span>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-white/50 py-3 px-2 text-center border-r border-white/30 truncate">BOM Description</span>
+                  <div className="text-[10px] font-black uppercase tracking-wider text-white/50 py-3 px-1 text-center flex items-center justify-center gap-1.5 relative group">
                     Status
                     <FilterDropdown 
                         column="Status" 
@@ -652,18 +652,18 @@ export function PnPValidator({
                   <div 
                     key={r.designator} 
                     id={`row-${r.rowIdx}`}
-                    className={`grid grid-cols-[100px_1fr_1fr_150px] border-b border-white/20 items-center transition-colors hover:bg-white/5 group ${
+                    className={`grid grid-cols-[minmax(72px,90px)_minmax(0,1fr)_minmax(0,1fr)_minmax(96px,120px)] border-b border-white/20 items-stretch transition-colors hover:bg-white/5 group ${
                       highlightedRow === r.rowIdx ? 'bg-primary/20 ring-2 ring-primary/50 relative z-10' : ''
                     }`}
                   >
-                    <span className="text-[11px] font-black font-mono text-white/90 text-center py-3 border-r border-white/20 h-full flex items-center justify-center shrink-0">{r.designator}</span>
-                    <span className={`text-[10px] font-bold text-center py-3 border-r border-white/20 px-2 h-full flex items-center justify-center ${r.status === 'not_in_bom' || r.status === 'mismatch' ? 'text-orange-300' : 'text-white/30'}`}>
+                    <span className="text-[11px] font-black font-mono text-white/90 text-center py-3 px-1 border-r border-white/20 flex items-center justify-center min-w-0 break-words">{r.designator}</span>
+                    <span className={`text-[10px] font-bold text-center py-3 px-2 border-r border-white/20 flex items-center justify-center min-w-0 break-words leading-snug ${r.status === 'not_in_bom' || r.status === 'mismatch' ? 'text-orange-300' : 'text-white/30'}`}>
                       {r.pnpDesc || '—'}
                     </span>
-                    <span className={`text-[10px] font-bold text-center py-3 border-r border-white/20 px-2 h-full flex items-center justify-center ${r.status === 'not_in_pnp' || r.status === 'mismatch' ? 'text-amber-300' : 'text-white/30'}`}>
+                    <span className={`text-[10px] font-bold text-center py-3 px-2 border-r border-white/20 flex items-center justify-center min-w-0 break-words leading-snug ${r.status === 'not_in_pnp' || r.status === 'mismatch' ? 'text-amber-300' : 'text-white/30'}`}>
                       {r.bomDesc || '—'}
                     </span>
-                    <div className="flex items-center justify-center h-full">
+                    <div className="flex items-center justify-center py-2 px-1 min-w-0">
                       <StatusBadge status={r.status} />
                     </div>
                   </div>
@@ -779,7 +779,7 @@ function StatusBadge({ status }: { status: ValidationResult['status'] }) {
   };
   const config = configs[status];
   return (
-    <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-[0.15em] border ${config.color} whitespace-nowrap`}>
+    <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-wide border text-center leading-tight max-w-full break-words ${config.color}`}>
       {config.label}
     </span>
   );
